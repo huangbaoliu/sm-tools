@@ -11,10 +11,7 @@ from PyQt5.uic import loadUi
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication, QWidget, QMessageBox
 from gmssl.sm4 import CryptSM4, SM4_ENCRYPT, SM4_DECRYPT
-from gmssl import sm3, func
-import base64
-import binascii
-from gmssl import sm2, func
+from gmssl import sm2, sm3, func
 from sm_cipher_tools import Ui_sm_cipher_tools # 增加文本显示器
 
 crypt_sm4 = CryptSM4()
@@ -45,7 +42,16 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
         self.pubkx_LE.textChanged.connect(self.pubkxy_to_pubk)
         self.pubky_LE.textChanged.connect(self.pubkxy_to_pubk)
         self.pubkall_LE.textChanged.connect(self.pubkall_input)
+        self.symm_key.textChanged.connect(self.symm_key_input)
         self.id_iv.textChanged.connect(self.id_iv_input)
+
+        #asym encrypt
+        self.C1.textChanged.connect(self.c1c3c2_to_ciphertext)
+        self.C3.textChanged.connect(self.c1c3c2_to_ciphertext)
+        self.C2.textChanged.connect(self.c1c3c2_to_ciphertext)
+
+        self.R.textChanged.connect(self.rs_to_sig)
+        self.S.textChanged.connect(self.rs_to_sig)
 
         #sm4 padding
         self.pad = False
@@ -135,6 +141,67 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
         self.pubkall_LE.setText(public_key.upper())
         self.msg_pubk_id_to_e()
 
+    def c1c3c2_to_ciphertext(self):
+        c1_str = self.C1.text().strip()
+        if True != self.is_hex_string(c1_str):
+            self.C1.setText(c1_str[0:len(c1_str) - 1].upper())
+            self.Qmsgbox_show("Error", "Please input hex number")
+            return
+        self.C1.setText(c1_str.upper())
+
+        c3_str = self.C3.text().strip()
+        if True != self.is_hex_string(c3_str):
+            self.C3.setText(c3_str[0:len(c3_str) - 1].upper())
+            self.Qmsgbox_show("Error", "Please input hex number")
+            return
+        self.C3.setText(c3_str.upper())
+
+        c2_str = self.C2.text().strip()
+        if True != self.is_hex_string(c2_str):
+            self.C2.setText(c2_str[0:len(c2_str) - 1].upper())
+            self.Qmsgbox_show("Error", "Please input hex number")
+            return
+        self.C2.setText(c2_str.upper())
+
+        c1c3c2 = c1_str + c3_str + c2_str
+        if True == self.is_hex_string(c1c3c2):
+            self.encrypt_result.setText(c1c3c2.upper())
+        else:
+            self.Qmsgbox_show("Error", "Please input hex number")
+            self.encrypt_result.setText("")
+            return
+
+    def rs_to_sig(self):
+        r_str = self.R.text().strip()
+        if True != self.is_hex_string(r_str):
+            self.R.setText(c3_str[0:len(r_str) - 1].upper())
+            self.Qmsgbox_show("Error", "Please input hex number")
+            return
+        self.R.setText(r_str.upper())
+
+        s_str = self.S.text().strip()
+        if True != self.is_hex_string(s_str):
+            self.S.setText(s_str[0:len(s_str) - 1].upper())
+            self.Qmsgbox_show("Error", "Please input hex number")
+            return
+        self.S.setText(s_str.upper())
+
+        rs = r_str + s_str
+        if True == self.is_hex_string(rs):
+            self.signature_value.setText(rs.upper())
+        else:
+            self.Qmsgbox_show("Error", "Please input hex number")
+            self.signature_value.setText("")
+            return
+
+    def symm_key_input(self):
+        symm_key_str = self.symm_key.text().strip()
+        if True != self.is_hex_string(symm_key_str):
+            self.symm_key.setText(symm_key_str[0:len(symm_key_str) - 1].upper())
+            self.Qmsgbox_show("Error", "Please input hex number")
+            return
+        self.symm_key.setText(symm_key_str.upper())
+
     def msg_to_hex(self):
         plaintext_msg = bytes(self.plaintext.text().strip(), 'ascii')
         self.plaintext_hex.setText(plaintext_msg.hex().upper())
@@ -194,16 +261,24 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
         self.signature_value.setText("")
         self.encrypt_result.setText("")
         self.decrypt_result.setText("")
+        self.symm_key.setText("")
+        self.C1.setText("")
+        self.C2.setText("")
+        self.C3.setText("")
+        self.R.setText("")
+        self.S.setText("")
 
     def sm4_encrypt(self):
-        if len(self.privkey.text().strip()) != 32:
-            self.Qmsgbox_show("Error", "Key len is not 16 bytes")
+        key_len = len(self.symm_key.text().strip())
+        if key_len != 32:
+            self.Qmsgbox_show("Error", "Key len is  %d HEXs, not 16 bytes" % key_len)
             return
-        sm4_key = bytes().fromhex(self.privkey.text().strip())
+        sm4_key = bytes().fromhex(self.symm_key.text().strip())
 
         if self.mode != "ECB":
-            if len(self.id_iv.text().strip()) != 32:
-                self.Qmsgbox_show("Error", "iv len is not 16 bytes")
+            id_iv_len = len(self.id_iv.text().strip())
+            if id_iv_len != 32:
+                self.Qmsgbox_show("Error", "iv len is %d HEXs, not 16 bytes" % id_iv_len)
                 return
             iv = bytes().fromhex(self.id_iv.text().strip())
 
@@ -225,12 +300,12 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
         else:
             if self.mode == "ECB":
                 if len(sm4_plaintext) % 16 != 0:
-                    self.Qmsgbox_show("Error", "Plaintext len is not 16's bytes")
+                    self.Qmsgbox_show("Error", "Plaintext len (%d) HEXs is not 16's bytes" % len(sm4_plaintext))
                     return
                 encrypt_value = crypt_sm4.crypt_ecb_nopad(sm4_plaintext)
             elif self.mode == "CBC":
                 if len(sm4_plaintext) % 16 != 0:
-                    self.Qmsgbox_show("Error", "Plaintext len is not 16's bytes")
+                    self.Qmsgbox_show("Error", "Plaintext len (%d) HEXs is not 16's bytes" % len(sm4_plaintext))
                     return
                 encrypt_value = crypt_sm4.crypt_cbc_nopad(iv, sm4_plaintext)
             elif self.mode == "OFB":
@@ -245,31 +320,29 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
 
     def sm4_decrypt(self):
         #判断密钥是否为16字节
-        if len(self.privkey.text().strip()) != 32:
-            self.Qmsgbox_show("Error", "Key len is not 16 bytes")
+        key_len = len(self.symm_key.text().strip())
+        if key_len != 32:
+            self.Qmsgbox_show("Error", "Key len is  %d HEXs, not 16 bytes" % key_len)
             return
-        sm4_key = bytes().fromhex(self.privkey.text().strip())
+        sm4_key = bytes().fromhex(self.symm_key.text().strip())
 
         #判断是否为ECB模式
         if self.mode != "ECB":
-            if len(self.id_iv.text().strip()) != 32:
-                QMessageBox.warning(self, "Warning", "iv len is not 16 bytes")
+            id_iv_len = len(self.id_iv.text().strip())
+            if id_iv_len != 32:
+                QMessageBox.warning(self, "Warning", "iv len is (%d) HEXs, not 16 bytes" % id_iv_len)
                 return
             iv = bytes().fromhex(self.id_iv.text().strip())
 
-
         #对密文长度做16整数倍判断
         encrypt_str = self.encrypt_result.text().strip()
-        if encrypt_str == "":
-            self.Qmsgbox_show("Error", "Encrypt result is null");
+        if len(encrypt_str) % 16 != 0:
+            self.Qmsgbox_show("Error", "Encrypt result length is (%d) HEXs, not 16's bytes" % len(encrypt_str));
             return
         if self.is_hex_string(encrypt_str) == False:
             self.Qmsgbox_show("Error", "Encrypt result is not hex string");
             return
 
-        if len(encrypt_str) % 2 != 0:
-            self.Qmsgbox_show("Error", "Encrypt result is not valid HEX value");
-            return
         encrypt_value = bytes().fromhex(encrypt_str)
         self.result_textEdit.append("SM4 Ciphertext: " + encrypt_value.hex().upper())
 
@@ -287,13 +360,13 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
         else:
             if self.mode == "ECB":
                 if len(encrypt_str) % 32 != 0:
-                    self.Qmsgbox_show("Error", "Encrypt result is not 16's bytes");
+                    self.Qmsgbox_show("Error", "Encrypt result length (%d) HEXs is not 16's bytes" % len(encrypt_str));
                     return
                 crypt_sm4.set_key(sm4_key, SM4_DECRYPT)
                 decrypt_value = crypt_sm4.crypt_ecb_nopad(encrypt_value)
             elif self.mode == "CBC":
                 if len(encrypt_str) % 32 != 0:
-                    self.Qmsgbox_show("Error", "Encrypt result is not 16's bytes");
+                    self.Qmsgbox_show("Error", "Encrypt result length (%d) HEXs is not 16's bytes" % len(encrypt_str));
                     return
                 crypt_sm4.set_key(sm4_key, SM4_DECRYPT)
                 decrypt_value = crypt_sm4.crypt_cbc_nopad(iv, encrypt_value)
@@ -355,7 +428,7 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
     def sm2_encrypt_func(self):
         public_key = self.pubkall_LE.text().strip()
         if len(public_key) != 128:
-            self.Qmsgbox_show("Error", "Public key len is not 64 bytes")
+            self.Qmsgbox_show("Error", "Public key len is (%d) HEXs, not 64 bytes" % len(public_key))
             return
 
         self.result_textEdit.append("SM2 Encrypt Publickey: " + public_key)
@@ -369,19 +442,29 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
 
         enc_data = sm2_crypt.encrypt(sm2_plaintext)
         self.result_textEdit.append("SM2 Encrypt Result Hex: " + enc_data.hex().upper())
+        data_c1 = enc_data[0:64]
+        self.result_textEdit.append("SM2 Encrypt Result C1 Hex: " + data_c1.hex().upper())
+        data_c3 = enc_data[64:96]
+        self.result_textEdit.append("SM2 Encrypt Result C3 Hex: " + data_c3.hex().upper())
+        data_c2 = enc_data[96:]
+        self.result_textEdit.append("SM2 Encrypt Result C2 Hex: " + data_c2.hex().upper())
+
+        self.C1.setText(data_c1.hex().upper())
+        self.C3.setText(data_c3.hex().upper())
+        self.C2.setText(data_c2.hex().upper())
         self.encrypt_result.setText(enc_data.hex().upper())
 
     def sm2_decrypt_func(self):
         private_key = self.privkey.text().strip()
         if len(private_key) != 64:
-            self.Qmsgbox_show("Error", "Private key len is not 32 bytes")
+            self.Qmsgbox_show("Error", "Private key len is (%d) HEXs not 32 bytes" % len(private_key))
             return
         self.result_textEdit.append("SM2 Decrypt Private_key: " + private_key)
         sm2_crypt = sm2.CryptSM2(private_key=private_key, public_key="")
 
         encrypt_str = self.encrypt_result.text().strip()
         if len(encrypt_str) <= 192:
-            self.Qmsgbox_show("Error", "Encrypt result length should longer than 96 bytes");
+            self.Qmsgbox_show("Error", "Encrypt result length (%d) HEXs should longer than 96 bytes" % len(encrypt_str));
             return
         if ((self.is_hex_string(encrypt_str) == False)|(len(encrypt_str)%2 != 0)):
             self.Qmsgbox_show("Error", "Encrypt result is not hex string");
@@ -399,15 +482,16 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
 
     def sm2_verify_func(self):
         public_key = self.pubkall_LE.text().strip()
-        if len(public_key) != 128:
-            self.Qmsgbox_show("Error", "Public key len is not 64 bytes")
+        len_pubk = len(public_key)
+        if len_pubk != 128:
+            self.Qmsgbox_show("Error", "Public key len is (%d) HEXs not 64 bytes" % len_pubk)
             return
         self.result_textEdit.append("SM2 Verify Publickey: " + public_key)
         sm2_crypt = sm2.CryptSM2(private_key="", public_key=public_key)
 
         e_hash = self.e_LE.text().strip()
         if len(e_hash) != 64:
-            self.Qmsgbox_show("Error", "e Hash, len is not 32 bytes")
+            self.Qmsgbox_show("Error", "e Hash, len is (%d) HEXs not 32 bytes" % len(e_hash))
             return
         if self.is_hex_string(e_hash) == False:
             self.Qmsgbox_show("Error", "e_hash is not hex string");
@@ -417,7 +501,7 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
 
         sign = self.signature_value.text().strip()
         if len(sign) != 128:
-            self.Qmsgbox_show("Error", "Signature value, len is not 64 bytes")
+            self.Qmsgbox_show("Error", "Signature value, len is (%d) HEXs not 64 bytes" % len(sign))
             return
         if self.is_hex_string(sign) == False:
             self.Qmsgbox_show("Error", "Sign result is not hex string");
@@ -427,6 +511,7 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
         verify = sm2_crypt.verify(sign, bytes().fromhex(e_hash))
         if verify == True:
             self.result_textEdit.append("SM2 Verify Result: True")
+            self.Qmsgbox_show("Info", "Verify signature successfully !");
         else:
             self.result_textEdit.append("SM2 Verify Result: False")
             self.Qmsgbox_show("Info", "Falied to verify signature!!!");
@@ -434,7 +519,7 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
     def sm2_sign_func(self):
         private_key = self.privkey.text().strip()
         if len(private_key) != 64:
-            self.Qmsgbox_show("Error", "Private key len is not 32 bytes")
+            self.Qmsgbox_show("Error", "Private key len is (%d) HEXs not 32 bytes" % len(private_key))
             return
         self.result_textEdit.append("SM2 Sign Privatekey: " + private_key)
         sm2_crypt = sm2.CryptSM2(private_key=private_key, public_key="")
@@ -445,14 +530,22 @@ class cipherToolsUI(Ui_sm_cipher_tools, QWidget):
 
         e_hash = self.e_LE.text().strip()
         if len(e_hash) != 64:
-            self.Qmsgbox_show("Error", "e Hash, len is not 32 bytes")
+            self.Qmsgbox_show("Error", "e Hash, len is (%d) HEXs not 32 bytes" % len(e_hash))
             return
         self.result_textEdit.append("SM2 Sign e_hash: " + e_hash)
 
         random_hex_str = func.random_hex(sm2_crypt.para_len)
         self.result_textEdit.append("SM2 Sign Randnumber: " + random_hex_str.upper())
         sign = sm2_crypt.sign(bytes().fromhex(e_hash), random_hex_str)
-        self.result_textEdit.append("SM2 Sign Result: " + sign.upper())
+
+        self.result_textEdit.append("SM2 Sign Result Hex: " + sign.upper())
+        data_r = sign[0:64]
+        self.result_textEdit.append("SM2 Sign Result:  R Hex: " + data_r.upper())
+        data_s = sign[64:]
+        self.result_textEdit.append("SM2 Sign Result:  S Hex: " + data_s.upper())
+
+        self.R.setText(data_r.upper())
+        self.S.setText(data_s.upper())
         self.signature_value.setText(sign.upper())
 
 if __name__ == '__main__':
